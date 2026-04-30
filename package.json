@@ -1,0 +1,18 @@
+{
+  "name": "banker-lab-pro",
+  "version": "3.0.0",
+  "private": true,
+  "description": "Production-ready mobile daily banker games app with Netlify live odds scanning, connection checks, and 3-5 odds accumulator building.",
+  "scripts": {
+    "start": "netlify dev",
+    "build": "node scripts/build-check.js",
+    "preview": "npx serve ."
+  },
+  "dependencies": {
+    "@netlify/functions": "latest"
+  },
+  "devDependencies": {
+    "netlify-cli": "latest",
+    "serve": "latest"
+  }
+}
