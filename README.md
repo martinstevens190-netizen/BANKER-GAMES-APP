@@ -1,36 +1,46 @@
 # Banker Lab Pro
 
-Mobile-first daily 3-5 odds banker scanner for global football fixtures.
+Mobile-first live odds scanner for daily 3-5 odds banker sets.
 
-## Deploy on Netlify
+## What this app does
 
-1. Upload the contents of this folder to GitHub.
-2. Import the repository into Netlify.
-3. Use these build settings:
-   - Build command: `npm run build`
-   - Publish directory: `.`
-   - Functions directory: `netlify/functions`
-4. Add site environment variables:
+- Connects to The Odds API through a Netlify Function.
+- Scans upcoming global fixtures inside your selected time window.
+- Ranks banker candidates using odds zone, implied probability, bookmaker depth, price spread, market type, kickoff window and lower-league weighting.
+- Builds Set A, Set B and an ultra lean set from qualified candidates.
+- Shows closest candidates separately when no full banker grade is reached.
+- Saves settings on the device.
+
+## Netlify environment variables
+
+Add these in Netlify under Site configuration > Environment variables:
 
 ```env
-ODDS_API_KEY=your_real_api_key_here
-ODDS_REGION=au
-ODDS_MARKETS=h2h,totals
+ODDS_API_KEY=your_real_key_here
+ODDS_REGION=au,uk,eu,us
+ODDS_MARKETS=h2h
 APP_TIMEZONE=Australia/Melbourne
-SCAN_WINDOW_HOURS=12
+SCAN_WINDOW_HOURS=24
+MAX_SPORTS_TO_SCAN=65
 ```
 
-The scanner also recognises `SPORTS_API_KEY`, `THE_ODDS_API_KEY`, or `ODDS_API_TOKEN`, but `ODDS_API_KEY` is the recommended name.
+Make sure `ODDS_API_KEY` applies to Functions scope, then trigger a fresh deploy.
 
-## After adding variables
+## Netlify settings
 
-Trigger a fresh Production deploy in Netlify. Then test:
+```text
+Build command: npm run build
+Publish directory: .
+Functions directory: netlify/functions
+```
 
-- `/api/status` should show `configured: true`
-- `/api/scan` should show `configured: true`
+## Test links after deploy
 
-The app never exposes the API key to the browser. It only checks whether a key exists inside the Netlify Function.
+```text
+/api/status
+/api/scan?windowHours=24&riskProfile=balanced&leaguePreference=lower-first&sportsScope=global
+```
 
-## Notes
+## Important
 
-No betting model can guarantee outcomes. The app ranks lower-variance candidates from available odds data and applies strict filters for safer accumulator building.
+No betting app can guarantee outcomes. This app is designed to avoid forcing weak picks and to separate near-miss candidates from qualified banker profiles.

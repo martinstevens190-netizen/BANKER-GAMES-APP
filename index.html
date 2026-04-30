@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#0f2a1d" />
-  <meta name="description" content="Mobile-first daily banker games scanner for 3-5 odds accumulators." />
+  <meta name="theme-color" content="#07130e" />
+  <meta name="description" content="Banker Lab Pro is a mobile-first live odds scanner for daily 3–5 odds banker sets." />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="assets/icon-192.svg" />
   <title>Banker Lab Pro</title>
@@ -12,148 +12,168 @@
 </head>
 <body>
   <div class="app-shell">
-    <header class="topbar">
-      <div class="brand-lockup">
-        <div class="brand-mark" aria-hidden="true">BL</div>
-        <div class="brand-copy">
-          <p class="eyebrow">Banker Lab Pro</p>
+    <header class="app-header" id="home">
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true">
+          <span>BL</span>
+        </div>
+        <div class="brand-text">
+          <span>Banker Lab Pro</span>
           <h1>Daily 3–5 Odds</h1>
         </div>
       </div>
-      <button class="icon-button" id="refreshTop" aria-label="Refresh scan">↻</button>
+      <button class="icon-btn" id="refreshTop" type="button" aria-label="Run scan">↻</button>
     </header>
 
     <main>
-      <section class="hero-card" id="home">
-        <div class="hero-copy">
-          <div class="hero-status-row">
-            <span class="status-dot" aria-hidden="true"></span>
-            <span class="pill" id="modePill">Scanner ready</span>
-          </div>
-          <h2>Daily banker shortlist built for safer 3–5 odds sets.</h2>
-          <p>Lower leagues are prioritised when their form, odds range and variance profile beat top-tier options.</p>
-          <div class="hero-actions">
-            <button class="primary-button" id="scanNow">Run live scan</button>
-            <a class="secondary-button" href="#settings">Filters</a>
-          </div>
-        </div>
-        <div class="score-ring" aria-label="Top confidence score">
-          <span id="heroScore">--</span>
-          <small>top score</small>
-        </div>
-      </section>
-
-      <section class="quick-panels" aria-label="Daily scan overview">
-        <article>
-          <span>Qualified</span>
-          <strong id="qualifiedCount">0</strong>
-        </article>
-        <article>
-          <span>Avg score</span>
-          <strong id="avgConfidence">--</strong>
-        </article>
-        <article>
-          <span>Set A</span>
-          <strong id="targetOdds">--</strong>
-        </article>
-      </section>
-
-      <section class="control-grid" aria-label="Scanner controls">
-        <label class="field-card">
-          <span>Window</span>
-          <select id="windowHours">
-            <option value="12">Next 12 hours</option>
-            <option value="18">Next 18 hours</option>
-            <option value="24">Next 24 hours</option>
-          </select>
-        </label>
-        <label class="field-card">
-          <span>Risk profile</span>
-          <select id="safetyMode">
-            <option value="strict">Strict banker</option>
-            <option value="balanced">Balanced 3–5 odds</option>
-            <option value="aggressive">Wider shortlist</option>
-          </select>
-        </label>
-        <label class="field-card wide">
-          <span>League bias</span>
-          <select id="leagueBias">
-            <option value="lower-first">Lower leagues first when qualified</option>
-            <option value="best-only">Best probability only</option>
-            <option value="top-safe">Top leagues safety lean</option>
-          </select>
-        </label>
-      </section>
-
-      <section class="section-head" id="bankers">
+      <section class="hero-card">
         <div>
-          <p class="eyebrow">Shortlist</p>
+          <div class="status-chip" id="connectionChip"><span></span><strong>Checking scanner</strong></div>
+          <h2>Live banker scanner built for cleaner daily sets.</h2>
+          <p>Ranks upcoming global fixtures with lower-league priority only when the data profile is stronger than top-tier games.</p>
+          <div class="hero-actions">
+            <button class="primary-btn" id="scanNow" type="button">Run scan</button>
+            <a class="secondary-btn" href="#filters">Adjust filters</a>
+          </div>
+        </div>
+        <aside class="hero-score" aria-label="Top confidence score">
+          <strong id="heroScore">--</strong>
+          <span>top score</span>
+        </aside>
+      </section>
+
+      <section class="stats-strip" aria-label="Scan summary">
+        <article><span>Qualified</span><strong id="qualifiedCount">0</strong></article>
+        <article><span>Checked</span><strong id="checkedCount">0</strong></article>
+        <article><span>Set A</span><strong id="setAOdds">--</strong></article>
+      </section>
+
+      <section class="scan-panel" id="filters">
+        <div class="panel-head">
+          <div>
+            <span class="kicker">Scan setup</span>
+            <h3>Daily filters</h3>
+          </div>
+          <span class="last-updated" id="lastUpdated">Not scanned yet</span>
+        </div>
+
+        <div class="control-grid">
+          <label class="control-card">
+            <span>Window</span>
+            <select id="windowHours">
+              <option value="12">Next 12 hours</option>
+              <option value="18">Next 18 hours</option>
+              <option value="24" selected>Next 24 hours</option>
+              <option value="48">Next 48 hours</option>
+            </select>
+          </label>
+
+          <label class="control-card">
+            <span>Risk profile</span>
+            <select id="riskProfile">
+              <option value="strict">Strict banker</option>
+              <option value="balanced" selected>Balanced 3–5 odds</option>
+              <option value="wide">Wider shortlist</option>
+            </select>
+          </label>
+
+          <label class="control-card wide">
+            <span>League preference</span>
+            <select id="leaguePreference">
+              <option value="lower-first" selected>Lower leagues first when qualified</option>
+              <option value="best-score">Best score only</option>
+              <option value="top-stability">Top-tier stability lean</option>
+            </select>
+          </label>
+
+          <label class="control-card wide">
+            <span>Sports scope</span>
+            <select id="sportsScope">
+              <option value="global" selected>Global football + major sports</option>
+              <option value="football-first">Football first</option>
+              <option value="football-only">Football only</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="section-title" id="bankers">
+        <div>
+          <span class="kicker">Shortlist</span>
           <h3>Top banker candidates</h3>
         </div>
-        <span class="refresh-time" id="lastUpdated">Not scanned yet</span>
+        <button class="small-action" id="clearSaved" type="button">Clear saved</button>
       </section>
 
-      <div class="empty-state" id="emptyState">
-        <div class="empty-icon" id="emptyIcon">▶</div>
-        <h4 id="emptyTitle">Ready for live scan</h4>
-        <p id="emptyCopy">Tap Run live scan to check upcoming football fixtures and build the daily 3–5 odds sets.</p>
-        <div class="empty-steps" id="emptyMeta">
-          <span>Manual scan</span>
-          <span>Lower-league priority</span>
-        </div>
-      </div>
-
-      <div class="cards" id="pickCards" aria-live="polite"></div>
-
-      <section class="section-head" id="accas">
+      <section class="notice-card" id="emptyState">
+        <div class="notice-icon">✓</div>
         <div>
-          <p class="eyebrow">Builder</p>
+          <h4 id="emptyTitle">Ready to scan</h4>
+          <p id="emptyCopy">Tap Run scan to check upcoming games and build today’s 3–5 odds sets.</p>
+          <div class="meta-pills" id="emptyMeta">
+            <span>Manual scan</span><span>Live odds route</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="cards-grid" id="qualifiedCards" aria-live="polite"></div>
+
+      <section class="section-title watchlist-title" id="watchlistHead">
+        <div>
+          <span class="kicker">Near miss list</span>
+          <h3>Closest safe candidates</h3>
+        </div>
+      </section>
+      <div class="cards-grid compact" id="watchlistCards"></div>
+
+      <section class="section-title" id="accas">
+        <div>
+          <span class="kicker">Builder</span>
           <h3>3–5 odds accumulator sets</h3>
         </div>
       </section>
-
       <div class="acca-grid" id="accaCards"></div>
 
-      <section class="section-head" id="settings">
-        <div>
-          <p class="eyebrow">Model</p>
-          <h3>Accuracy guardrails</h3>
+      <section class="model-panel" id="model">
+        <div class="panel-head">
+          <div>
+            <span class="kicker">Model guardrails</span>
+            <h3>Accuracy controls</h3>
+          </div>
         </div>
-      </section>
-
-      <section class="filters-panel">
-        <div class="filter-row"><span>Minimum leg score</span><strong id="minConfidence">88%</strong></div>
-        <div class="filter-row"><span>Per-leg odds zone</span><strong>1.18–1.90</strong></div>
-        <div class="filter-row"><span>Preferred markets</span><strong>1X2, totals, team goals</strong></div>
-        <div class="filter-row"><span>League rule</span><strong>Lower tier only when stronger</strong></div>
-        <div class="filter-row"><span>Auto exclusions</span><strong>Started games, weak prices, thin data</strong></div>
-        <div class="filter-row"><span>Live data status</span><strong id="dataStatus">Checking…</strong></div>
-        <div class="filter-row"><span>Events scanned</span><strong id="scannedEvents">0</strong></div>
-        <div class="notice">No betting model can guarantee outcomes. This app is built to rank lower-variance candidates, but final staking and team-news checks remain essential.</div>
+        <div class="model-grid">
+          <div><span>Minimum score</span><strong id="minimumScore">80%</strong></div>
+          <div><span>Odds zone</span><strong id="oddsZone">1.12–2.05</strong></div>
+          <div><span>Markets</span><strong id="marketList">h2h</strong></div>
+          <div><span>Sports scanned</span><strong id="sportsScanned">0</strong></div>
+          <div><span>Sports with games</span><strong id="sportsWithGames">0</strong></div>
+          <div><span>Scanner</span><strong id="scannerStatus">Checking</strong></div>
+        </div>
+        <p class="guardrail-note" id="scannerMessage">The app will never force a banker when the selected window does not produce a strong enough profile.</p>
       </section>
     </main>
 
     <nav class="bottom-nav" aria-label="Main navigation">
-      <a href="#home" class="active"><span class="nav-icon">⌂</span><span>Home</span></a>
-      <a href="#bankers"><span class="nav-icon">✓</span><span>Bankers</span></a>
-      <a href="#accas"><span class="nav-icon">▦</span><span>Accas</span></a>
-      <a href="#settings"><span class="nav-icon">⚙</span><span>Filters</span></a>
+      <a href="#home" class="active"><span>⌂</span>Home</a>
+      <a href="#bankers"><span>✓</span>Bankers</a>
+      <a href="#accas"><span>▦</span>Accas</a>
+      <a href="#filters"><span>⚙</span>Filters</a>
     </nav>
   </div>
 
   <template id="pickTemplate">
     <article class="pick-card">
-      <div class="pick-topline">
+      <div class="pick-top">
         <span class="tag"></span>
-        <strong class="confidence"></strong>
+        <strong class="score"></strong>
       </div>
       <h4 class="match"></h4>
       <p class="league"></p>
-      <div class="market-row">
+      <div class="selection-row">
         <span class="market"></span>
         <strong class="odds"></strong>
       </div>
-      <div class="meta-grid">
+      <div class="info-row">
         <span class="kickoff"></span>
         <span class="model"></span>
       </div>
@@ -163,11 +183,11 @@
 
   <template id="accaTemplate">
     <article class="acca-card">
-      <div class="acca-title-row">
+      <div class="acca-top">
         <h4></h4>
-        <span class="acca-odds"></span>
+        <strong></strong>
       </div>
-      <ul></ul>
+      <ol></ol>
       <p></p>
     </article>
   </template>

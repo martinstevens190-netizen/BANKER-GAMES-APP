@@ -1,46 +1,57 @@
 const state = {
-  picks: [],
-  source: 'idle',
   configured: false,
+  connected: false,
   loading: false,
   scanned: false,
-  lastUpdated: null,
-  lastMessage: ''
+  picks: [],
+  watchlist: [],
+  saved: [],
+  lastPayload: {},
+  lastError: ''
 };
 
 const els = {
-  pickCards: document.getElementById('pickCards'),
-  accaCards: document.getElementById('accaCards'),
-  emptyState: document.getElementById('emptyState'),
-  emptyIcon: document.getElementById('emptyIcon'),
-  emptyTitle: document.getElementById('emptyTitle'),
-  emptyCopy: document.getElementById('emptyCopy'),
-  emptyMeta: document.getElementById('emptyMeta'),
-  pickTemplate: document.getElementById('pickTemplate'),
-  accaTemplate: document.getElementById('accaTemplate'),
+  connectionChip: document.getElementById('connectionChip'),
   scanNow: document.getElementById('scanNow'),
   refreshTop: document.getElementById('refreshTop'),
   windowHours: document.getElementById('windowHours'),
-  safetyMode: document.getElementById('safetyMode'),
-  leagueBias: document.getElementById('leagueBias'),
-  modePill: document.getElementById('modePill'),
+  riskProfile: document.getElementById('riskProfile'),
+  leaguePreference: document.getElementById('leaguePreference'),
+  sportsScope: document.getElementById('sportsScope'),
   heroScore: document.getElementById('heroScore'),
   qualifiedCount: document.getElementById('qualifiedCount'),
-  avgConfidence: document.getElementById('avgConfidence'),
-  targetOdds: document.getElementById('targetOdds'),
-  minConfidence: document.getElementById('minConfidence'),
+  checkedCount: document.getElementById('checkedCount'),
+  setAOdds: document.getElementById('setAOdds'),
   lastUpdated: document.getElementById('lastUpdated'),
-  dataStatus: document.getElementById('dataStatus'),
-  scannedEvents: document.getElementById('scannedEvents')
+  emptyState: document.getElementById('emptyState'),
+  emptyTitle: document.getElementById('emptyTitle'),
+  emptyCopy: document.getElementById('emptyCopy'),
+  emptyMeta: document.getElementById('emptyMeta'),
+  qualifiedCards: document.getElementById('qualifiedCards'),
+  watchlistHead: document.getElementById('watchlistHead'),
+  watchlistCards: document.getElementById('watchlistCards'),
+  accaCards: document.getElementById('accaCards'),
+  pickTemplate: document.getElementById('pickTemplate'),
+  accaTemplate: document.getElementById('accaTemplate'),
+  minimumScore: document.getElementById('minimumScore'),
+  oddsZone: document.getElementById('oddsZone'),
+  marketList: document.getElementById('marketList'),
+  sportsScanned: document.getElementById('sportsScanned'),
+  sportsWithGames: document.getElementById('sportsWithGames'),
+  scannerStatus: document.getElementById('scannerStatus'),
+  scannerMessage: document.getElementById('scannerMessage'),
+  clearSaved: document.getElementById('clearSaved')
 };
 
-const settingsKey = 'bankerLabSettings';
+const settingsKey = 'bankerLabProSettingsV5';
+const savedKey = 'bankerLabProSavedScansV5';
 
 function saveSettings() {
   const settings = {
     windowHours: els.windowHours.value,
-    safetyMode: els.safetyMode.value,
-    leagueBias: els.leagueBias.value
+    riskProfile: els.riskProfile.value,
+    leaguePreference: els.leaguePreference.value,
+    sportsScope: els.sportsScope.value
   };
   localStorage.setItem(settingsKey, JSON.stringify(settings));
 }
@@ -49,280 +60,319 @@ function loadSettings() {
   try {
     const settings = JSON.parse(localStorage.getItem(settingsKey) || '{}');
     if (settings.windowHours) els.windowHours.value = settings.windowHours;
-    if (settings.safetyMode) els.safetyMode.value = settings.safetyMode;
-    if (settings.leagueBias) els.leagueBias.value = settings.leagueBias;
-  } catch (_) {}
+    if (settings.riskProfile) els.riskProfile.value = settings.riskProfile;
+    if (settings.leaguePreference) els.leaguePreference.value = settings.leaguePreference;
+    if (settings.sportsScope) els.sportsScope.value = settings.sportsScope;
+    state.saved = JSON.parse(localStorage.getItem(savedKey) || '[]');
+  } catch (_) {
+    state.saved = [];
+  }
+}
+
+function scoreFloor() {
+  if (els.riskProfile.value === 'strict') return 84;
+  if (els.riskProfile.value === 'wide') return 68;
+  return 76;
+}
+
+function oddsZone() {
+  if (els.riskProfile.value === 'strict') return { min: 1.12, max: 1.78 };
+  if (els.riskProfile.value === 'wide') return { min: 1.08, max: 2.35 };
+  return { min: 1.10, max: 2.05 };
 }
 
 function formatOdds(value) {
   const number = Number(value || 0);
-  return number ? number.toFixed(2) : '--';
-}
-
-function confidenceFloor() {
-  const mode = els.safetyMode.value;
-  if (mode === 'strict') return 88;
-  if (mode === 'balanced') return 84;
-  return 80;
+  return number > 0 ? number.toFixed(2) : '--';
 }
 
 function formatUpdated(value) {
   if (!value) return 'Not scanned yet';
   return `Updated ${new Intl.DateTimeFormat('en-AU', {
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone: 'Australia/Melbourne'
+    hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne'
   }).format(new Date(value))}`;
 }
 
-function lowerTierScore(pick) {
-  return /lower|npl|first division|second division|third division|league one|league two|regional|state|serie c|serie d|segunda|primera b|championship|national league|liga 2|u21|u23/i.test(`${pick.league} ${pick.tag}`) ? 6 : 0;
-}
-
-function sortedPicks() {
-  const floor = confidenceFloor();
-  const filtered = state.picks.filter(p => Number(p.confidence) >= floor);
-  return filtered.sort((a, b) => {
-    const lowerA = lowerTierScore(a);
-    const lowerB = lowerTierScore(b);
-    if (els.leagueBias.value === 'lower-first') return (b.confidence + lowerB) - (a.confidence + lowerA);
-    if (els.leagueBias.value === 'top-safe') return b.confidence - a.confidence - (lowerB - lowerA) / 2;
-    return b.confidence - a.confidence;
-  });
-}
-
-function buildAccas(picks) {
-  const shortlist = picks.filter(p => p.confidence >= confidenceFloor()).slice(0, 9);
-  const setA = [];
-  let oddsA = 1;
-  for (const pick of shortlist) {
-    if (setA.length >= 5 || oddsA >= 4.35) break;
-    setA.push(pick);
-    oddsA *= pick.odds;
-  }
-
-  const setB = [];
-  let oddsB = 1;
-  const usedGames = new Set(setA.slice(0, 2).map(p => p.match));
-  for (const pick of shortlist) {
-    if (setB.length >= 5 || oddsB >= 4.25) break;
-    if (usedGames.has(pick.match) && shortlist.length > 4) continue;
-    setB.push(pick);
-    oddsB *= pick.odds;
-  }
-
-  if (setB.length < 2 && shortlist.length >= 2) {
-    const extras = shortlist.filter(p => !setB.includes(p)).slice(0, 2 - setB.length);
-    setB.push(...extras);
-    oddsB = setB.reduce((acc, p) => acc * Number(p.odds || 1), 1);
-  }
-
-  return [
-    {
-      title: 'Set A · safest build',
-      odds: setA.length ? oddsA : 0,
-      picks: setA,
-      note: 'Highest scoring legs first. The build stops early when the target zone is reached.'
-    },
-    {
-      title: 'Set B · alternate profile',
-      odds: setB.length ? oddsB : 0,
-      picks: setB,
-      note: 'Different games are preferred where the shortlist allows it.'
-    }
-  ];
-}
-
-function normaliseApiPick(item) {
+function normalisePick(item = {}) {
   return {
-    match: item.match || 'Upcoming match',
-    league: item.league || 'Global football',
+    id: item.id || `${item.match || ''}-${item.market || ''}`,
+    match: item.match || 'Upcoming fixture',
+    league: item.league || 'Global market',
     market: item.market || 'Market lean',
     odds: Number(item.odds || 0),
     confidence: Number(item.confidence || 0),
     kickoff: item.kickoff || 'Upcoming Melbourne time',
-    model: item.model || 'Model ranked',
-    tag: item.tag || 'QUALIFIED',
-    reason: item.reason || 'Ranked from market safety, implied probability, kickoff window and league profile.'
+    model: item.model || 'Scanner ranked',
+    tag: item.tag || 'Qualified',
+    reason: item.reason || 'Ranked from live odds profile, bookmaker depth, price gap, kickoff window and league preference.',
+    sportKey: item.sportKey || ''
   };
 }
 
-function emptyStateCopy() {
-  if (!state.configured) {
-    return {
-      icon: '🔌',
-      title: 'Live data key not detected',
-      copy: 'The app is running, but Netlify has not passed an odds API key to the scanner yet. Check that ODDS_API_KEY is saved under this exact site, then trigger a fresh production deploy.',
-      meta: ['Site variables', 'ODDS_API_KEY']
-    };
-  }
-  if (state.source === 'error') {
-    return {
-      icon: '⚠️',
-      title: 'Scanner connected, but the API returned an error',
-      copy: state.lastMessage || 'Open /api/scan in your browser to view the exact scanner response, then check your API key, plan, region and market access.',
-      meta: ['Connected', 'Check API response']
-    };
-  }
-  if (state.scanned) {
-    return {
-      icon: '✓',
-      title: 'No qualified bankers in this scan window',
-      copy: 'Your live feed is connected, but no picks passed the current safety filters. Try Balanced 3–5 odds or widen the window to 18–24 hours.',
-      meta: ['Live connected', `${els.scannedEvents.textContent || 0} games checked`]
-    };
-  }
-  return {
-    icon: '▶',
-    title: 'Ready for live scan',
-    copy: 'Your data connection is ready. Tap Run live scan to check upcoming games and build the daily 3–5 odds sets.',
-    meta: ['Live connected', 'Manual scan']
-  };
-}
-
-function renderEmptyState(show) {
-  els.emptyState.classList.toggle('hidden', !show);
-  if (!show) return;
-  const copy = emptyStateCopy();
-  els.emptyIcon.textContent = copy.icon;
-  els.emptyTitle.textContent = copy.title;
-  els.emptyCopy.textContent = copy.copy;
-  els.emptyMeta.innerHTML = '';
-  copy.meta.forEach(item => {
-    const span = document.createElement('span');
-    span.textContent = item;
-    els.emptyMeta.appendChild(span);
-  });
-}
-
-function renderPicks() {
-  const picks = sortedPicks();
-  els.pickCards.innerHTML = '';
-  picks.forEach((pick) => {
-    const node = els.pickTemplate.content.cloneNode(true);
-    node.querySelector('.tag').textContent = pick.tag;
-    node.querySelector('.confidence').textContent = `${pick.confidence}%`;
-    node.querySelector('.match').textContent = pick.match;
-    node.querySelector('.league').textContent = pick.league;
-    node.querySelector('.market').textContent = pick.market;
-    node.querySelector('.odds').textContent = formatOdds(pick.odds);
-    node.querySelector('.kickoff').textContent = pick.kickoff;
-    node.querySelector('.model').textContent = pick.model;
-    node.querySelector('.reason').textContent = pick.reason;
-    els.pickCards.appendChild(node);
-  });
-
-  const avg = picks.length ? Math.round(picks.reduce((sum, p) => sum + Number(p.confidence || 0), 0) / picks.length) : 0;
-  els.heroScore.textContent = picks[0]?.confidence || '--';
-  els.qualifiedCount.textContent = picks.length;
-  els.avgConfidence.textContent = picks.length ? `${avg}%` : '--';
-  els.minConfidence.textContent = `${confidenceFloor()}%`;
-  els.lastUpdated.textContent = formatUpdated(state.lastUpdated);
-  renderEmptyState(picks.length === 0);
-
-  renderAccas(picks);
-}
-
-function renderAccas(picks) {
-  const accas = buildAccas(picks);
-  els.accaCards.innerHTML = '';
-  accas.forEach((acca, index) => {
-    const node = els.accaTemplate.content.cloneNode(true);
-    node.querySelector('h4').textContent = acca.title;
-    node.querySelector('.acca-odds').textContent = formatOdds(acca.odds);
-    const ul = node.querySelector('ul');
-    if (acca.picks.length) {
-      acca.picks.forEach(p => {
-        const li = document.createElement('li');
-        li.textContent = `${p.market} · ${p.match} @ ${formatOdds(p.odds)}`;
-        ul.appendChild(li);
-      });
-    } else {
-      const li = document.createElement('li');
-      li.textContent = state.configured ? 'Run a scan or loosen filters to build this set.' : 'Connect live data to build this set.';
-      ul.appendChild(li);
-    }
-    node.querySelector('p').textContent = acca.note;
-    els.accaCards.appendChild(node);
-    if (index === 0) els.targetOdds.textContent = formatOdds(acca.odds);
-  });
-}
-
-function setStatus(payload = {}) {
-  const configured = Boolean(payload.configured || payload.source === 'api');
+function setConnection(payload = {}) {
+  const configured = Boolean(payload.configured);
   state.configured = configured;
-  const label = configured ? 'Live data connected' : 'Data key not detected';
-  els.modePill.textContent = label;
-  els.dataStatus.textContent = configured ? 'Connected' : 'Not detected';
-  document.body.classList.toggle('is-connected', configured);
+  state.connected = configured && payload.status !== 'error';
+  document.body.classList.toggle('is-connected', state.connected);
+  document.body.classList.toggle('is-error', payload.status === 'error');
+  const chipText = state.connected ? 'Live scanner connected' : configured ? 'Scanner check needed' : 'API key not detected';
+  els.connectionChip.querySelector('strong').textContent = chipText;
+  els.scannerStatus.textContent = state.connected ? 'Connected' : configured ? 'Check route' : 'Key missing';
 }
 
 function setLoading(value) {
   state.loading = value;
+  document.body.classList.toggle('is-loading', value);
   els.scanNow.disabled = value;
   els.refreshTop.disabled = value;
-  els.scanNow.textContent = value ? 'Scanning…' : 'Run live scan';
-  document.body.classList.toggle('is-loading', value);
+  els.scanNow.textContent = value ? 'Scanning…' : 'Run scan';
+}
+
+function emptyStateContent() {
+  if (state.loading) {
+    return {
+      title: 'Scanning live markets',
+      copy: 'Checking upcoming fixtures, bookmaker depth, market prices and lower-league edges now.',
+      meta: ['Live route', 'Please wait']
+    };
+  }
+  if (!state.configured) {
+    return {
+      title: 'API key not detected',
+      copy: 'Add ODDS_API_KEY to this Netlify site with Functions scope, then redeploy. The app shell is ready, but live ranking needs the key.',
+      meta: ['ODDS_API_KEY', 'Functions scope']
+    };
+  }
+  if (state.lastError) {
+    return {
+      title: 'Scanner needs attention',
+      copy: state.lastError,
+      meta: ['Open /api/status', 'Check Netlify logs']
+    };
+  }
+  if (state.scanned && state.picks.length === 0 && state.watchlist.length > 0) {
+    return {
+      title: 'No full banker grade yet',
+      copy: 'Fixtures were checked, but none reached the selected banker score. The closest candidates are shown below for review instead of forcing a weak pick.',
+      meta: [`${state.watchlist.length} close candidates`, `${state.lastPayload.scannedEvents || 0} fixtures checked`]
+    };
+  }
+  if (state.scanned && state.picks.length === 0) {
+    return {
+      title: 'No playable banker profile found',
+      copy: state.lastPayload.message || 'The provider returned no usable fixtures for this sport, region and window. Try 24–48 hours, football-first, or a wider profile.',
+      meta: [`${state.lastPayload.scannedEvents || 0} fixtures checked`, `${state.lastPayload.sportsScanned || 0} sports scanned`]
+    };
+  }
+  return {
+    title: 'Ready to scan',
+    copy: 'Tap Run scan to check upcoming games and build today’s 3–5 odds sets.',
+    meta: ['Manual scan', 'Lower-league priority']
+  };
+}
+
+function renderEmpty(show) {
+  els.emptyState.classList.toggle('hidden', !show);
+  if (!show) return;
+  const content = emptyStateContent();
+  els.emptyTitle.textContent = content.title;
+  els.emptyCopy.textContent = content.copy;
+  els.emptyMeta.innerHTML = '';
+  content.meta.forEach(text => {
+    const item = document.createElement('span');
+    item.textContent = text;
+    els.emptyMeta.appendChild(item);
+  });
+}
+
+function renderPick(container, pick) {
+  const node = els.pickTemplate.content.cloneNode(true);
+  node.querySelector('.tag').textContent = pick.tag;
+  node.querySelector('.score').textContent = `${Math.round(pick.confidence)}%`;
+  node.querySelector('.match').textContent = pick.match;
+  node.querySelector('.league').textContent = pick.league;
+  node.querySelector('.market').textContent = pick.market;
+  node.querySelector('.odds').textContent = formatOdds(pick.odds);
+  node.querySelector('.kickoff').textContent = pick.kickoff;
+  node.querySelector('.model').textContent = pick.model;
+  node.querySelector('.reason').textContent = pick.reason;
+  container.appendChild(node);
+}
+
+function rankPicks(list) {
+  const lowerFirst = els.leaguePreference.value === 'lower-first';
+  const topLean = els.leaguePreference.value === 'top-stability';
+  return [...list].sort((a, b) => {
+    const lowerA = /lower|tier|division|league one|league two|regional|npl|serie c|liga 2|championship/i.test(`${a.league} ${a.tag}`) ? 4 : 0;
+    const lowerB = /lower|tier|division|league one|league two|regional|npl|serie c|liga 2|championship/i.test(`${b.league} ${b.tag}`) ? 4 : 0;
+    if (lowerFirst) return (b.confidence + lowerB) - (a.confidence + lowerA);
+    if (topLean) return (b.confidence - lowerB / 2) - (a.confidence - lowerA / 2);
+    return b.confidence - a.confidence;
+  });
+}
+
+function buildSet(name, picks, targetMin, targetMax, offset = 0) {
+  const usedMatches = new Set();
+  const legs = [];
+  let odds = 1;
+  const candidates = picks.slice(offset).concat(picks.slice(0, offset));
+  for (const pick of candidates) {
+    if (legs.length >= 5 || odds >= targetMin) break;
+    if (usedMatches.has(pick.match) && picks.length > 4) continue;
+    const nextOdds = odds * Number(pick.odds || 1);
+    if (legs.length >= 2 && nextOdds > targetMax + .65) continue;
+    legs.push(pick);
+    usedMatches.add(pick.match);
+    odds = nextOdds;
+  }
+  return { name, odds: legs.length ? odds : 0, legs };
+}
+
+function renderAccas() {
+  const picks = rankPicks(state.picks).slice(0, 14);
+  const sets = [
+    buildSet('Set A · safest build', picks, 3.0, 5.2, 0),
+    buildSet('Set B · alternate build', picks, 3.0, 5.2, 2),
+    buildSet('Ultra lean · 1–2 bankers', picks.slice(0, 4), 1.55, 2.75, 0)
+  ];
+
+  els.accaCards.innerHTML = '';
+  sets.forEach((set, index) => {
+    const node = els.accaTemplate.content.cloneNode(true);
+    node.querySelector('h4').textContent = set.name;
+    node.querySelector('strong').textContent = formatOdds(set.odds);
+    const list = node.querySelector('ol');
+    if (set.legs.length) {
+      set.legs.forEach(leg => {
+        const item = document.createElement('li');
+        item.textContent = `${leg.market} · ${leg.match} @ ${formatOdds(leg.odds)}`;
+        list.appendChild(item);
+      });
+    } else {
+      const item = document.createElement('li');
+      item.textContent = state.configured ? 'Run a scan or widen the profile to build this set.' : 'Connect live data to build this set.';
+      list.appendChild(item);
+    }
+    node.querySelector('p').textContent = index === 2
+      ? 'Lowest variance shortlist for a safer single or double lean.'
+      : 'Built from the highest ranked legs while avoiding repeated games where possible.';
+    els.accaCards.appendChild(node);
+    if (index === 0) els.setAOdds.textContent = formatOdds(set.odds);
+  });
+}
+
+function render() {
+  const qualified = rankPicks(state.picks).filter(p => p.confidence >= scoreFloor());
+  const watchlist = rankPicks(state.watchlist).filter(p => !qualified.some(q => q.id === p.id)).slice(0, 9);
+
+  els.qualifiedCards.innerHTML = '';
+  qualified.forEach(pick => renderPick(els.qualifiedCards, pick));
+
+  els.watchlistCards.innerHTML = '';
+  const showWatchlist = watchlist.length > 0;
+  els.watchlistHead.classList.toggle('hidden', !showWatchlist);
+  els.watchlistCards.classList.toggle('hidden', !showWatchlist);
+  watchlist.forEach(pick => renderPick(els.watchlistCards, pick));
+
+  const top = qualified[0];
+  const checked = Number(state.lastPayload.scannedEvents || 0);
+  const score = top ? Math.round(top.confidence) : null;
+  els.heroScore.textContent = score ? `${score}` : '--';
+  document.body.style.setProperty('--score-angle', `${score || 0}%`);
+  document.body.classList.toggle('has-picks', Boolean(qualified.length));
+  els.qualifiedCount.textContent = qualified.length;
+  els.checkedCount.textContent = checked;
+  els.lastUpdated.textContent = formatUpdated(state.lastPayload.generatedAt);
+
+  els.minimumScore.textContent = `${scoreFloor()}%`;
+  const zone = oddsZone();
+  els.oddsZone.textContent = `${zone.min.toFixed(2)}–${zone.max.toFixed(2)}`;
+  els.marketList.textContent = state.lastPayload.markets || 'h2h';
+  els.sportsScanned.textContent = Number(state.lastPayload.sportsScanned || 0);
+  els.sportsWithGames.textContent = Number(state.lastPayload.sportsWithFixtures || 0);
+  els.scannerMessage.textContent = state.lastPayload.message || 'The app will never force a banker when the selected window does not produce a strong enough profile.';
+
+  renderEmpty(qualified.length === 0);
+  renderAccas();
+}
+
+async function fetchJson(url) {
+  const res = await fetch(url, { cache: 'no-store' });
+  const text = await res.text();
+  let payload = {};
+  try { payload = JSON.parse(text || '{}'); } catch (_) { payload = { message: text || 'Unexpected scanner response' }; }
+  if (!res.ok) {
+    const error = new Error(payload.message || `Scanner route returned ${res.status}`);
+    error.payload = payload;
+    throw error;
+  }
+  return payload;
 }
 
 async function checkStatus() {
   try {
-    const res = await fetch('/api/status', { cache: 'no-store' });
-    const payload = await res.json().catch(() => ({}));
-    if (res.ok) setStatus(payload);
-  } catch (_) {
-    els.modePill.textContent = 'Scanner status unavailable';
-    els.dataStatus.textContent = 'Unavailable';
+    const payload = await fetchJson('/api/status');
+    state.lastPayload = { ...state.lastPayload, ...payload };
+    state.lastError = '';
+    setConnection(payload);
+  } catch (error) {
+    state.lastError = 'The scanner route is not responding yet. Check the Netlify Function deploy and open /api/status after redeploying.';
+    setConnection({ configured: false, status: 'error' });
   } finally {
-    renderPicks();
+    render();
   }
 }
 
 async function runScan() {
   setLoading(true);
   saveSettings();
+  state.lastError = '';
+  render();
   try {
     const params = new URLSearchParams({
       windowHours: els.windowHours.value,
-      safetyMode: els.safetyMode.value,
-      leagueBias: els.leagueBias.value
+      riskProfile: els.riskProfile.value,
+      leaguePreference: els.leaguePreference.value,
+      sportsScope: els.sportsScope.value
     });
-    const res = await fetch(`/api/scan?${params}`, { cache: 'no-store' });
-    const payload = await res.json().catch(() => ({}));
-    setStatus(payload);
-
+    const payload = await fetchJson(`/api/scan?${params.toString()}`);
     state.scanned = true;
-    state.lastMessage = payload.message || '';
-    state.lastUpdated = payload.generatedAt || new Date().toISOString();
-    els.scannedEvents.textContent = Number(payload.scannedEvents || 0);
-
-    if (!res.ok) {
-      state.source = 'error';
-      state.picks = [];
-      throw new Error(payload?.message || 'Scanner unavailable');
+    state.lastPayload = payload;
+    state.picks = Array.isArray(payload.picks) ? payload.picks.map(normalisePick) : [];
+    state.watchlist = Array.isArray(payload.watchlist) ? payload.watchlist.map(normalisePick) : [];
+    setConnection(payload);
+    if (state.picks.length) {
+      state.saved.unshift({ at: payload.generatedAt, picks: state.picks.slice(0, 8) });
+      state.saved = state.saved.slice(0, 8);
+      localStorage.setItem(savedKey, JSON.stringify(state.saved));
     }
-
-    state.picks = Array.isArray(payload.picks) ? payload.picks.map(normaliseApiPick) : [];
-    state.source = payload.source || (state.configured ? 'api' : 'configuration');
   } catch (error) {
+    const payload = error.payload || {};
+    state.scanned = true;
+    state.lastPayload = payload;
+    state.lastError = payload.message || error.message || 'Scanner unavailable. Check Netlify logs and API settings.';
     state.picks = [];
-    state.source = 'error';
-    state.lastMessage = error.message || 'Scanner unavailable';
-    els.modePill.textContent = state.configured ? 'API check required' : 'Scanner unavailable';
+    state.watchlist = [];
+    setConnection({ configured: Boolean(payload.configured), status: 'error' });
   } finally {
     setLoading(false);
-    renderPicks();
+    render();
   }
 }
 
-[els.windowHours, els.safetyMode, els.leagueBias].forEach(el => {
-  el.addEventListener('change', () => {
+[els.windowHours, els.riskProfile, els.leaguePreference, els.sportsScope].forEach(control => {
+  control.addEventListener('change', () => {
     saveSettings();
-    renderPicks();
+    render();
   });
 });
+
 els.scanNow.addEventListener('click', runScan);
 els.refreshTop.addEventListener('click', runScan);
+els.clearSaved.addEventListener('click', () => {
+  state.saved = [];
+  localStorage.removeItem(savedKey);
+});
 
 document.querySelectorAll('.bottom-nav a').forEach(link => {
   link.addEventListener('click', () => {
@@ -336,9 +386,6 @@ if ('serviceWorker' in navigator) {
 }
 
 loadSettings();
-setStatus({ configured: false });
-renderPicks();
-checkStatus().then(() => {
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('autoscan') === '1') runScan();
-});
+setConnection({ configured: false });
+render();
+checkStatus();
