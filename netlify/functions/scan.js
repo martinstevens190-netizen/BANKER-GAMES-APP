@@ -487,7 +487,7 @@ exports.handler = async (event) => {
     const marketsUsed = new Set();
     const regionsUsed = new Set();
     let lastApiUsage = apiUsage(sportsResponse.headers);
-    let providerMessage = '';
+    let providerIssueMessage = '';
 
     const oddsMarketOrder = MARKET_LIST.includes('h2h') ? ['h2h', ...MARKET_LIST.filter(item => item !== 'h2h')] : MARKET_LIST;
     const regionOrder = REGION_LIST.length > 1 ? [REGION_LIST[0], ...REGION_LIST.slice(1, 3)] : REGION_LIST;
@@ -497,7 +497,7 @@ exports.handler = async (event) => {
       attempts.push(...result.attempts);
       if (result.usage) lastApiUsage = result.usage;
       if (result.error) {
-        providerMessage = result.error;
+        providerIssueMessage = result.error;
         break;
       }
       if (result.marketsUsed) marketsUsed.add(result.marketsUsed);
@@ -515,11 +515,11 @@ exports.handler = async (event) => {
       if (events.length >= 120 && riskProfile !== 'wide') break;
     }
 
-    if (!events.length && !providerMessage) {
+    if (!events.length && !providerIssueMessage) {
       const fallback = await fetchUpcomingFallback(fromIso, toIso, now, windowEnd);
       attempts.push(...fallback.attempts);
       if (fallback.usage) lastApiUsage = fallback.usage;
-      if (fallback.error) providerMessage = fallback.error;
+      if (fallback.error) providerIssueMessage = fallback.error;
       if (fallback.events.length) {
         events.push(...fallback.events.map(item => ({ ...item, sport_title: item.sport_title || 'Upcoming global', sport_key: item.sport_key || 'upcoming' })));
         eventsBySport.push({ key: 'upcoming', title: 'Upcoming global fallback', count: fallback.events.length });
@@ -528,7 +528,7 @@ exports.handler = async (event) => {
       }
     }
 
-    if (providerMessage) {
+    if (providerIssueMessage) {
       return json(200, configStatus({
         status: 'needs-attention',
         picks: [],
@@ -542,7 +542,7 @@ exports.handler = async (event) => {
         regionsUsed: [...regionsUsed].join(',') || REGION_LIST[0],
         apiUsage: lastApiUsage,
         attempts: attempts.slice(0, 40),
-        message: providerMessage
+        message: providerIssueMessage
       }));
     }
 
