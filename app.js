@@ -40,11 +40,13 @@ const els = {
   sportsWithGames: document.getElementById('sportsWithGames'),
   scannerStatus: document.getElementById('scannerStatus'),
   scannerMessage: document.getElementById('scannerMessage'),
+  regionsUsed: document.getElementById('regionsUsed'),
+  apiCredits: document.getElementById('apiCredits'),
   clearSaved: document.getElementById('clearSaved')
 };
 
-const settingsKey = 'bankerLabProSettingsV5';
-const savedKey = 'bankerLabProSavedScansV5';
+const settingsKey = 'bankerLabProSettingsV6';
+const savedKey = 'bankerLabProSavedScansV6';
 
 function saveSettings() {
   const settings = {
@@ -72,13 +74,13 @@ function loadSettings() {
 function scoreFloor() {
   if (els.riskProfile.value === 'strict') return 84;
   if (els.riskProfile.value === 'wide') return 68;
-  return 76;
+  return 74;
 }
 
 function oddsZone() {
-  if (els.riskProfile.value === 'strict') return { min: 1.12, max: 1.78 };
-  if (els.riskProfile.value === 'wide') return { min: 1.08, max: 2.35 };
-  return { min: 1.10, max: 2.05 };
+  if (els.riskProfile.value === 'strict') return { min: 1.10, max: 1.76 };
+  if (els.riskProfile.value === 'wide') return { min: 1.06, max: 2.50 };
+  return { min: 1.08, max: 2.18 };
 }
 
 function formatOdds(value) {
@@ -111,13 +113,27 @@ function normalisePick(item = {}) {
 
 function setConnection(payload = {}) {
   const configured = Boolean(payload.configured);
+  const status = payload.status || 'unknown';
   state.configured = configured;
-  state.connected = configured && payload.status !== 'error';
+  state.connected = configured && status === 'ready';
   document.body.classList.toggle('is-connected', state.connected);
-  document.body.classList.toggle('is-error', payload.status === 'error');
-  const chipText = state.connected ? 'Live scanner connected' : configured ? 'Scanner check needed' : 'API key not detected';
+  document.body.classList.toggle('is-error', status === 'needs-attention' || status === 'error');
+
+  let chipText = 'API key not detected';
+  let scannerText = 'Key missing';
+  if (state.connected) {
+    chipText = 'Live scanner connected';
+    scannerText = 'Connected';
+  } else if (configured && status === 'needs-attention') {
+    chipText = 'Provider attention required';
+    scannerText = 'Needs attention';
+  } else if (configured) {
+    chipText = 'Live route ready';
+    scannerText = 'Ready';
+  }
+
   els.connectionChip.querySelector('strong').textContent = chipText;
-  els.scannerStatus.textContent = state.connected ? 'Connected' : configured ? 'Check route' : 'Key missing';
+  els.scannerStatus.textContent = scannerText;
 }
 
 function setLoading(value) {
@@ -147,7 +163,7 @@ function emptyStateContent() {
     return {
       title: 'Scanner needs attention',
       copy: state.lastError,
-      meta: ['Open /api/status', 'Check Netlify logs']
+      meta: ['Review diagnostics', 'Check API credits']
     };
   }
   if (state.scanned && state.picks.length === 0 && state.watchlist.length > 0) {
@@ -288,6 +304,11 @@ function render() {
   const zone = oddsZone();
   els.oddsZone.textContent = `${zone.min.toFixed(2)}–${zone.max.toFixed(2)}`;
   els.marketList.textContent = state.lastPayload.markets || 'h2h';
+  if (els.regionsUsed) els.regionsUsed.textContent = state.lastPayload.regionsUsed || state.lastPayload.region || 'au';
+  if (els.apiCredits) {
+    const usage = state.lastPayload.apiUsage || {};
+    els.apiCredits.textContent = usage.remaining ? `${usage.remaining} left` : 'Not reported';
+  }
   els.sportsScanned.textContent = Number(state.lastPayload.sportsScanned || 0);
   els.sportsWithGames.textContent = Number(state.lastPayload.sportsWithFixtures || 0);
   els.scannerMessage.textContent = state.lastPayload.message || 'The app will never force a banker when the selected window does not produce a strong enough profile.';
@@ -316,7 +337,7 @@ async function checkStatus() {
     state.lastError = '';
     setConnection(payload);
   } catch (error) {
-    state.lastError = 'The scanner route is not responding yet. Check the Netlify Function deploy and open /api/status after redeploying.';
+    state.lastError = 'The live scanner route is not responding yet. Check that netlify/functions/scan.js deployed, then redeploy from GitHub.';
     setConnection({ configured: false, status: 'error' });
   } finally {
     render();
@@ -353,7 +374,7 @@ async function runScan() {
     state.lastError = payload.message || error.message || 'Scanner unavailable. Check Netlify logs and API settings.';
     state.picks = [];
     state.watchlist = [];
-    setConnection({ configured: Boolean(payload.configured), status: 'error' });
+    setConnection({ configured: Boolean(payload.configured), status: 'needs-attention' });
   } finally {
     setLoading(false);
     render();
