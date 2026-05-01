@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#07130e" />
   <meta name="description" content="Banker Lab Pro is a mobile-first live odds scanner for daily 3–5 odds banker sets." />
+  <meta name="app-version" content="7.0.0" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="assets/icon-192.svg" />
   <title>Banker Lab Pro</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=7" />
 </head>
 <body>
   <div class="app-shell">
@@ -33,8 +34,10 @@
           <p>Ranks upcoming global fixtures with lower-league priority only when the data profile is stronger than top-tier games.</p>
           <div class="hero-actions">
             <button class="primary-btn" id="scanNow" type="button">Run scan</button>
-            <a class="secondary-btn" href="#filters">Adjust filters</a>
+            <button class="secondary-btn" id="testConnection" type="button">Test connection</button>
+            <a class="secondary-btn" href="#filters">Filters</a>
           </div>
+          <div class="run-feedback" id="runFeedback">Ready for a fresh scan.</div>
         </div>
         <aside class="hero-score" aria-label="Top confidence score">
           <strong id="heroScore">--</strong>
@@ -46,6 +49,7 @@
         <article><span>Qualified</span><strong id="qualifiedCount">0</strong></article>
         <article><span>Checked</span><strong id="checkedCount">0</strong></article>
         <article><span>Set A</span><strong id="setAOdds">--</strong></article>
+        <article><span>Route</span><strong id="routeStatus">Checking</strong></article>
       </section>
 
       <section class="scan-panel" id="filters">
@@ -150,8 +154,14 @@
           <div><span>Sports scanned</span><strong id="sportsScanned">0</strong></div>
           <div><span>Sports with games</span><strong id="sportsWithGames">0</strong></div>
           <div><span>Scanner</span><strong id="scannerStatus">Checking</strong></div>
+          <div><span>Provider</span><strong id="providerStatus">Waiting</strong></div>
+          <div><span>Last action</span><strong id="lastAction">Not run</strong></div>
         </div>
         <p class="guardrail-note" id="scannerMessage">The app will never force a banker when the selected window does not produce a strong enough profile.</p>
+        <details class="debug-panel">
+          <summary>Scanner details</summary>
+          <pre id="debugOutput">Waiting for scan.</pre>
+        </details>
       </section>
     </main>
 
@@ -194,6 +204,7 @@
     </article>
   </template>
 
-  <script src="app.js"></script>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

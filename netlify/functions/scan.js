@@ -1,5 +1,17 @@
+const APP_VERSION = '7.0.0';
 const API_BASE = process.env.SPORTS_API_BASE_URL || 'https://api.the-odds-api.com/v4';
-const API_KEY = process.env.ODDS_API_KEY || process.env.SPORTS_API_KEY || process.env.THE_ODDS_API_KEY || process.env.ODDS_API_TOKEN || '';
+const RAW_API_KEY = process.env.ODDS_API_KEY || process.env.SPORTS_API_KEY || process.env.THE_ODDS_API_KEY || process.env.ODDS_API_TOKEN || '';
+function cleanApiKey(value = '') {
+  let key = String(value || '').trim();
+  key = key.replace(/^['\"]|['\"]$/g, '').trim();
+  key = key.replace(/^Bearer\s+/i, '').trim();
+  key = key.replace(/^ODDS_API_KEY\s*=\s*/i, '').trim();
+  key = key.replace(/^SPORTS_API_KEY\s*=\s*/i, '').trim();
+  key = key.replace(/^THE_ODDS_API_KEY\s*=\s*/i, '').trim();
+  key = key.replace(/^apiKey\s*=\s*/i, '').trim();
+  return key;
+}
+const API_KEY = cleanApiKey(RAW_API_KEY);
 const REGION_RAW = process.env.ODDS_REGION || process.env.ODDS_PRIMARY_REGION || 'au';
 const MARKETS_RAW = process.env.ODDS_MARKETS || 'h2h';
 const TIMEZONE = process.env.APP_TIMEZONE || 'Australia/Melbourne';
@@ -36,8 +48,10 @@ const MARKET_LIST = parseList(MARKETS_RAW, ['h2h'], VALID_MARKETS);
 
 function configStatus(extra = {}) {
   return {
+    appVersion: APP_VERSION,
     configured: Boolean(API_KEY),
     detectedVariable: process.env.ODDS_API_KEY ? 'ODDS_API_KEY' : process.env.SPORTS_API_KEY ? 'SPORTS_API_KEY' : process.env.THE_ODDS_API_KEY ? 'THE_ODDS_API_KEY' : process.env.ODDS_API_TOKEN ? 'ODDS_API_TOKEN' : null,
+    keyLooksPlaceholder: /your_|replace_|api_key_here|example/i.test(API_KEY),
     region: REGION_LIST.join(','),
     markets: MARKET_LIST.join(','),
     timezone: TIMEZONE,
@@ -117,6 +131,17 @@ function riskSettings(riskProfile) {
   return { floor: 74, minOdds: 1.08, maxOdds: 2.18, watchFloor: 63 };
 }
 
+function providerErrorCode(data) {
+  if (!data || typeof data !== 'object') return null;
+  return data.error_code || data.code || null;
+}
+
+function providerMessage(data) {
+  if (!data) return '';
+  if (typeof data === 'string') return data;
+  return data.message || data.error || '';
+}
+
 function apiUsage(headers = {}) {
   return {
     remaining: headers['x-requests-remaining'] || null,
@@ -130,7 +155,7 @@ function describeApiError(result) {
   const code = data.error_code || data.code || '';
   const detail = data.message || data.error || (typeof data === 'string' ? data : '');
   if (result.status === 401 || result.status === 403 || /INVALID_KEY|DEACTIVATED_KEY|MISSING_KEY/i.test(code)) {
-    return 'The odds API key was detected but the provider rejected it. Check the key value and subscription.';
+    return 'The scanner route is working and the API key reached the function, but the odds provider rejected it. Re-copy only the key value, confirm the account is active, then redeploy.';
   }
   if (result.status === 429 || /EXCEEDED_FREQ_LIMIT/i.test(code)) {
     return 'The provider rate-limited the scanner. Wait a minute, then run again. This version uses fewer odds calls.';
@@ -157,6 +182,11 @@ async function fetchJson(url) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function buildSportsUrl() {
+  const params = new URLSearchParams({ apiKey: API_KEY });
+  return `${API_BASE}/sports/?${params.toString()}`;
 }
 
 function buildEventsUrl(sportKey, commenceFrom, commenceTo) {
@@ -346,14 +376,28 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: responseHeaders, body: '' };
 
   const path = event.path || event.rawUrl || '';
-  if (path.includes('/status')) {
+  const query = event.queryStringParameters || {};
+  const isStatusRequest = path.includes('/status') || query.status === '1' || query.status === 'true';
+  if (isStatusRequest) {
     if (!API_KEY) {
       return json(200, configStatus({ status: 'missing-key', message: 'No odds API key detected.' }));
     }
-    const sportsResponse = await fetchJson(`${API_BASE}/sports/?apiKey=${API_KEY}`);
-    if (!sportsResponse.ok) {
+    if (/your_|replace_|api_key_here|example/i.test(API_KEY)) {
       return json(200, configStatus({
-        status: 'needs-attention',
+        status: 'key-rejected',
+        providerStatusCode: 'placeholder',
+        message: 'The function received a placeholder-style API key. Replace it with the real key value only, then clear cache and redeploy.'
+      }));
+    }
+    const sportsResponse = await fetchJson(buildSportsUrl());
+    if (!sportsResponse.ok) {
+      const code = providerErrorCode(sportsResponse.data);
+      const status = (sportsResponse.status === 401 || sportsResponse.status === 403 || /INVALID_KEY|DEACTIVATED_KEY|MISSING_KEY/i.test(code || '')) ? 'key-rejected' : (sportsResponse.status === 402 || sportsResponse.status === 429 ? 'quota-limited' : 'needs-attention');
+      return json(200, configStatus({
+        status,
+        providerStatusCode: sportsResponse.status,
+        providerCode: code,
+        providerDetail: providerMessage(sportsResponse.data),
         message: describeApiError(sportsResponse),
         apiUsage: apiUsage(sportsResponse.headers)
       }));
@@ -379,7 +423,6 @@ exports.handler = async (event) => {
   }
 
   try {
-    const query = event.queryStringParameters || {};
     const windowHours = Math.min(48, Math.max(1, Number(query.windowHours || process.env.SCAN_WINDOW_HOURS || 24)));
     const riskProfile = query.riskProfile || 'balanced';
     const leaguePreference = query.leaguePreference || 'lower-first';
@@ -390,15 +433,33 @@ exports.handler = async (event) => {
     const fromIso = now.toISOString();
     const toIso = windowEnd.toISOString();
 
-    const sportsResponse = await fetchJson(`${API_BASE}/sports/?apiKey=${API_KEY}`);
-    if (!sportsResponse.ok) {
+    if (/your_|replace_|api_key_here|example/i.test(API_KEY)) {
       return json(200, configStatus({
-        status: 'needs-attention',
+        status: 'key-rejected',
         picks: [],
         watchlist: [],
         scannedEvents: 0,
         sportsScanned: 0,
         sportsWithFixtures: 0,
+        providerStatusCode: 'placeholder',
+        message: 'The function received a placeholder-style API key. Replace it with the real key value only, then clear cache and redeploy.'
+      }));
+    }
+
+    const sportsResponse = await fetchJson(buildSportsUrl());
+    if (!sportsResponse.ok) {
+      const code = providerErrorCode(sportsResponse.data);
+      const status = (sportsResponse.status === 401 || sportsResponse.status === 403 || /INVALID_KEY|DEACTIVATED_KEY|MISSING_KEY/i.test(code || '')) ? 'key-rejected' : (sportsResponse.status === 402 || sportsResponse.status === 429 ? 'quota-limited' : 'needs-attention');
+      return json(200, configStatus({
+        status,
+        picks: [],
+        watchlist: [],
+        scannedEvents: 0,
+        sportsScanned: 0,
+        sportsWithFixtures: 0,
+        providerStatusCode: sportsResponse.status,
+        providerCode: code,
+        providerDetail: providerMessage(sportsResponse.data),
         message: describeApiError(sportsResponse),
         apiUsage: apiUsage(sportsResponse.headers)
       }));
